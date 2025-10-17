@@ -30,34 +30,9 @@ pipeline {
                         sh """
                         aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ecrUrl}
                         docker build -t ${env.ECR_REPO}:${IMAGE_TAG} .
-
-                        # Trivy Scan with increased timeout
-                        echo "Running Trivy scan with 30-minute timeout..."
-                        trivy image --timeout 30m --severity HIGH,CRITICAL --format json -o trivy-report.json ${env.ECR_REPO}:${IMAGE_TAG} || true
-
+                        trivy image --severity HIGH,CRITICAL --format json -o trivy-report.json ${env.ECR_REPO}:${IMAGE_TAG} || true
                         docker tag ${env.ECR_REPO}:${IMAGE_TAG} ${imageFullTag}
-                        
-                        # Push with retry logic
-                        set +e
-                        MAX_RETRIES=3
-                        RETRY_COUNT=0
-                        
-                        while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
-                          docker push ${imageFullTag}
-                          if [ \$? -eq 0 ]; then
-                            echo "✅ Push successful"
-                            break
-                          else
-                            RETRY_COUNT=\$((RETRY_COUNT+1))
-                            echo "⚠️ Push failed, retrying... (\$RETRY_COUNT/\$MAX_RETRIES)"
-                            sleep 30
-                          fi
-                        done
-                        
-                        if [ \$RETRY_COUNT -eq \$MAX_RETRIES ]; then
-                          echo "❌ Push failed after \$MAX_RETRIES attempts"
-                          exit 1
-                        fi
+                        docker push ${imageFullTag}
                         """
 
                         archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
